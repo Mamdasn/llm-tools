@@ -10,23 +10,26 @@ fi
 case "$target" in
   -h|--help)
     cat <<'HELP'
-Usage: bash install.sh <graphify|context-mode|graphiti|autostart|all>
+Usage: bash install.sh <graphify|context-mode|graphiti|autostart|playwright|all>
 
 graphify      Install uv, Python, and the pinned Graphify runtime and adapter.
 context-mode  Install Node, Context Mode 1.0.169, and the Codex overlay.
 graphiti      Install Graphiti, Ollama, models, FalkorDB, and the startup bridge.
 autostart     Alias for graphiti; includes the canonical Bash entry point.
-all           Install all three integrations and their dependencies.
+playwright    Install Playwright CLI and its global Codex skill.
+all           Install all four integrations and their dependencies.
 
 Run as your normal user on macOS or Linux (apt/dnf for missing OS packages).
 Downloads missing prerequisites; system packages may require sudo.
-Writes codex.toml snippets; does not edit your global Codex configuration.
+MCP targets write codex.toml snippets; Playwright installs a skill without an MCP server.
+Does not edit your global Codex configuration.
 
 Optional environment variables:
   GRAPHIFY_CODEX_HOME  Adapter destination (default: ~/.local/share/graphify-codex)
   CONTEXT_MODE_ROOT    Existing package (default: ~/.local/share/codex-context-mode/plugins/context-mode)
   GRAPHITI_ROOT       Existing checkout (default: ~/local-memory/graphiti)
   GRAPHITI_LOCAL_HOME  Launcher destination (default: ~/.local/share/graphiti-local)
+  CODEX_HOME          Codex directory for Playwright skills (default: ~/.codex)
   CODEX_MCP_AUTOSTART_HOME  Autostart destination (default: ~/.local/share/codex-mcp-autostart)
   GRAPHITI_MCP_PYTHON   Existing Graphiti Python runtime (default: $GRAPHITI_ROOT/mcp_server/.venv/bin/python)
   GRAPHITI_START_SCRIPT  Existing launcher (default: $GRAPHITI_LOCAL_HOME/start-local.sh)
@@ -37,7 +40,7 @@ macOS Codex invokes the same mcp.sh script. See codex-mcp-autostart/README.md.
 HELP
     exit 0
     ;;
-  graphify|context-mode|graphiti|autostart|all) ;;
+  graphify|context-mode|graphiti|autostart|playwright|all) ;;
   *) printf 'Unknown target: %s. Run: bash install.sh --help\n' "$target" >&2; exit 1 ;;
 esac
 
@@ -53,6 +56,9 @@ if [[ "$target" == autostart ]]; then target=graphiti; fi
 # Provision only dependencies needed by the selected target.
 if [[ "$target" == graphify || "$target" == graphiti || "$target" == all ]]; then
   ensure_uv
+fi
+if [[ "$target" == playwright || "$target" == all ]]; then
+  ensure_node
 fi
 if [[ "$target" == context-mode || "$target" == all ]]; then
   ensure_node
@@ -141,4 +147,9 @@ if [[ "$target" == graphiti || "$target" == all ]]; then
   GRAPHITI_ROOT="$graphiti_root" GRAPHITI_LOCAL_HOME="$graphiti_dir" \
     bash "$source_dir/codex-mcp-autostart/install.sh"
 fi
-printf '\nMerge the selected snippets into ~/.codex/config.toml, then reload Codex.\n'
+if [[ "$target" == playwright || "$target" == all ]]; then
+  bash "$source_dir/playwright-cli/install.sh"
+fi
+if [[ "$target" != playwright ]]; then
+  printf '\nMerge the selected snippets into ~/.codex/config.toml, then reload Codex.\n'
+fi
