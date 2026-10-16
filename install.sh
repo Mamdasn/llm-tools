@@ -10,14 +10,16 @@ fi
 case "$target" in
   -h|--help)
     cat <<'HELP'
-Usage: bash install.sh <graphify|context-mode|graphiti|all>
+Usage: bash install.sh <graphify|context-mode|graphiti|autostart|all>
 
-graphify      Install the code-only adapter and pinned Python runtime (requires uv).
-context-mode  Apply the Codex overlay to an existing Context Mode 1.0.169 package.
-graphiti      Install local configuration and launcher for an existing Graphiti checkout.
-all           Install all three integrations after checking their prerequisites.
+graphify      Install uv, Python, and the pinned Graphify runtime and adapter.
+context-mode  Install Node, Context Mode 1.0.169, and the Codex overlay.
+graphiti      Install Graphiti, Ollama, models, FalkorDB, and the startup bridge.
+autostart     Alias for graphiti; includes the canonical Bash entry point.
+all           Install all three integrations and their dependencies.
 
-Requires Bash, Python 3 and Git. Context Mode also requires Node 22.5+.
+Run as your normal user on macOS or Linux (apt/dnf for missing OS packages).
+Downloads missing prerequisites; system packages may require sudo.
 Writes codex.toml snippets; does not edit your global Codex configuration.
 
 Optional environment variables:
@@ -25,28 +27,36 @@ Optional environment variables:
   CONTEXT_MODE_ROOT    Existing package (default: ~/.local/share/codex-context-mode/plugins/context-mode)
   GRAPHITI_ROOT       Existing checkout (default: ~/local-memory/graphiti)
   GRAPHITI_LOCAL_HOME  Launcher destination (default: ~/.local/share/graphiti-local)
+  CODEX_MCP_AUTOSTART_HOME  Autostart destination (default: ~/.local/share/codex-mcp-autostart)
+  GRAPHITI_MCP_PYTHON   Existing Graphiti Python runtime (default: $GRAPHITI_ROOT/mcp_server/.venv/bin/python)
+  GRAPHITI_START_SCRIPT  Existing launcher (default: $GRAPHITI_LOCAL_HOME/start-local.sh)
+
+Graphiti downloads qwen3.5:9b and nomic-embed-text for new configurations.
+Existing configurations and models are reused. Linux user units are generated;
+macOS Codex invokes the same mcp.sh script. See codex-mcp-autostart/README.md.
 HELP
     exit 0
     ;;
-  graphify|context-mode|graphiti|all) ;;
+  graphify|context-mode|graphiti|autostart|all) ;;
   *) printf 'Unknown target: %s. Run: bash install.sh --help\n' "$target" >&2; exit 1 ;;
 esac
 
-for dependency in python3 git; do
-  command -v "$dependency" >/dev/null || { printf 'Missing dependency: %s\n' "$dependency" >&2; exit 1; }
-done
+source "$source_dir/scripts/dependencies.sh"
+ensure_base
 graphify_dir="${GRAPHIFY_CODEX_HOME:-$HOME/.local/share/graphify-codex}"
 context_dir="${CONTEXT_MODE_ROOT:-$HOME/.local/share/codex-context-mode/plugins/context-mode}"
 graphiti_root="${GRAPHITI_ROOT:-$HOME/local-memory/graphiti}"
 graphiti_dir="${GRAPHITI_LOCAL_HOME:-$HOME/.local/share/graphiti-local}"
 
-# Check every selected target before installing any of them.
-if [[ "$target" == graphify || "$target" == all ]]; then
-  command -v uv >/dev/null || { printf 'Install uv first: https://docs.astral.sh/uv/\n' >&2; exit 1; }
+if [[ "$target" == autostart ]]; then target=graphiti; fi
+
+# Provision only dependencies needed by the selected target.
+if [[ "$target" == graphify || "$target" == graphiti || "$target" == all ]]; then
+  ensure_uv
 fi
 if [[ "$target" == context-mode || "$target" == all ]]; then
-  command -v node >/dev/null || { printf 'Context Mode requires Node 22.5+.\n' >&2; exit 1; }
-  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 5)) process.exit(1);' || { printf 'Context Mode requires Node 22.5+.\n' >&2; exit 1; }
+  ensure_node
+  ensure_context_mode
   python3 - "$context_dir" <<'PY'
 import json
 import sys
@@ -62,9 +72,12 @@ if not all((root / name).is_file() for name in required):
 if json.loads((root / "package.json").read_text())["version"] != "1.0.169":
     sys.exit("This overlay requires Context Mode 1.0.169; review compatibility before using another version.")
 PY
+  check_sqlite "$context_dir"
 fi
 if [[ "$target" == graphiti || "$target" == all ]]; then
-  [[ -f "$graphiti_root/mcp_server/main.py" ]] || { printf 'Set GRAPHITI_ROOT to an existing Graphiti checkout.\n' >&2; exit 1; }
+  ensure_ollama
+  ensure_docker
+  ensure_graphiti_checkout
 fi
 
 if [[ "$target" == graphify || "$target" == all ]]; then
@@ -119,12 +132,13 @@ fi
 if [[ "$target" == graphiti || "$target" == all ]]; then
   mkdir -p "$graphiti_dir"
   install -m 755 "$source_dir/graphiti-local/start-local.sh" "$graphiti_dir/start-local.sh"
-  install -m 644 "$source_dir/graphiti-local/codex.example.toml" "$graphiti_dir/codex.toml"
+  install -m 644 "$source_dir/graphiti-local/runtime.sh" "$graphiti_dir/runtime.sh"
   # Keep an existing user's configuration on repeated installs.
   if [[ ! -e "$graphiti_dir/config.example.yaml" ]]; then
     install -m 600 "$source_dir/graphiti-local/config.example.yaml" "$graphiti_dir/config.example.yaml"
   fi
-  printf 'Graphiti launcher: %s/start-local.sh\nCodex configuration: %s/codex.toml\n' "$graphiti_dir" "$graphiti_dir"
-  printf 'Keep GRAPHITI_ROOT set when starting the launcher if using a custom checkout.\n'
+  provision_graphiti_data
+  GRAPHITI_ROOT="$graphiti_root" GRAPHITI_LOCAL_HOME="$graphiti_dir" \
+    bash "$source_dir/codex-mcp-autostart/install.sh"
 fi
 printf '\nMerge the selected snippets into ~/.codex/config.toml, then reload Codex.\n'

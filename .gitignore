@@ -11,3 +11,7 @@ bin/
 graphify-out/
 *.log
 config.local.yaml
+codex-mcp-autostart/settings.json
+codex-mcp-autostart/codex.toml
+codex-mcp-autostart/python-path
+*.backup.*
