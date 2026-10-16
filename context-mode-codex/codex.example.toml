@@ -1,0 +1,9 @@
+# Use this standalone entry OR the plugin's MCP entry, not both.
+[mcp_servers.context-mode]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/context-mode/.codex-plugin/run.mjs", "server"]
+
+[mcp_servers.context-mode.env]
+CONTEXT_MODE_PLATFORM = "codex"
+# Optional if codex is not already on PATH:
+# CODEX_BIN_DIR = "/absolute/path/to/directory/containing/codex"

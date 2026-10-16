@@ -1,0 +1,30 @@
+{
+  "name": "context-mode",
+  "version": "1.0.169",
+  "description": "Local Context Mode integration: searchable tool output and session continuity.",
+  "author": {
+    "name": "Mert Koseo\u011flu",
+    "url": "https://github.com/mksglu"
+  },
+  "homepage": "https://github.com/mksglu/context-mode#readme",
+  "repository": "https://github.com/mksglu/context-mode",
+  "license": "Elastic-2.0",
+  "keywords": [
+    "mcp",
+    "context-window",
+    "sandbox",
+    "code-execution",
+    "fts5",
+    "bm25",
+    "playwright",
+    "context7"
+  ],
+  "hooks": "./.codex-plugin/hooks.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "context-mode",
+    "shortDescription": "Searchable tool output and session continuity",
+    "developerName": "Mert Koseo\u011flu",
+    "category": "Productivity"
+  }
+}

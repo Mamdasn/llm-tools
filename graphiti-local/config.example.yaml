@@ -1,0 +1,35 @@
+server:
+  transport: http
+  host: "127.0.0.1"
+  port: 8765
+
+llm:
+  provider: openai
+  model: "qwen3.5:9b"
+  small_model: "qwen3.5:9b"
+  max_tokens: 8192
+  structured_output_mode: json_schema
+  providers:
+    openai:
+      api_key: ollama
+      api_url: "http://localhost:11434/v1"
+
+embedder:
+  provider: openai
+  model: nomic-embed-text
+  dimensions: 768
+  providers:
+    openai:
+      api_key: ollama
+      api_url: "http://localhost:11434/v1"
+
+database:
+  provider: falkordb
+  providers:
+    falkordb:
+      uri: "redis://localhost:6379"
+      database: default_db
+
+graphiti:
+  group_id: personal
+  user_id: local_user

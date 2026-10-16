@@ -1,0 +1,6 @@
+# Replace /absolute/path with the installation directory printed by install.sh.
+[mcp_servers.graphify]
+command = "/absolute/path/tools/graphifyy/bin/python"
+args = ["/absolute/path/launcher.py"]
+startup_timeout_sec = 60.0
+# Leave cwd unset so each chat uses its own checkout.
