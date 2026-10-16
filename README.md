@@ -1,108 +1,75 @@
-# Personal MCP integrations
+# MCP tools for Codex
 
-Local adapters and deployment configuration used with Codex. Upstream servers,
-installed dependencies, credentials, repository graphs, and personal memories
-are not stored here. The examples require replacing absolute-path placeholders.
+Personal adapters for code navigation, searchable context, and persistent memory.
 
-| Integration | Custom behavior | Upstream |
-| --- | --- | --- |
-| [Graphify](graphify-codex/) | Code-only graph creation, external per-checkout caches, shared watchers, checkout-bound query tools and status | [Graphify Labs](https://github.com/Graphify-Labs/graphify) |
-| [Context Mode](context-mode-codex/) | Codex launcher, plugin metadata, lifecycle hook wiring and project-directory detection | [Context Mode](https://github.com/mksglu/context-mode) |
-| [Graphiti](graphiti-local/) | Local Ollama/FalkorDB configuration and startup script | [Graphiti](https://github.com/getzep/graphiti) |
+| Integration | What it adds |
+| --- | --- |
+| [Graphify](graphify-codex/) | Code graphs without an LLM; automatic indexing and updates |
+| [Context Mode](context-mode-codex/) | Codex launcher, lifecycle hooks, and searchable session context |
+| [Graphiti](graphiti-local/) | Local memory using Ollama and FalkorDB |
 
-Granola uses its official hosted MCP endpoint and needs no source adapter here.
-Codex's bundled Node REPL, browser, computer-use and app tools are managed by Codex.
+## Install
 
-## Graphify
+Requires **Bash, Python 3, and Git** on macOS or Linux.
 
-Requires macOS or Linux, Git and [uv](https://docs.astral.sh/uv/).
-
-```sh
-bash graphify-codex/install.sh
+```bash
+git clone https://github.com/Mamdasn/llm-tools.git
+cd llm-tools
+bash install.sh graphify      # or context-mode, graphiti, all
 ```
 
-The installer uses `~/.local/share/graphify-codex` by default; override with
-`GRAPHIFY_CODEX_HOME`. It pins `graphifyy[mcp,watch,sql]==0.9.91` and `mcp==1.30.0`.
-Graphify's server uses the MCP 1.x API; MCP 2.x is incompatible with this version.
-It installs an isolated runtime rather than replacing another Graphify install.
+The installer prints the path to each generated `codex.toml`. Merge the selected
+entries into `~/.codex/config.toml`, then reload Codex. Existing Codex settings
+are left untouched. Run `bash install.sh --help` for installation path overrides.
 
-Merge [codex.example.toml](graphify-codex/codex.example.toml) into
-`~/.codex/config.toml`, using the paths printed by the installer. Keep `cwd`
-unset. Reload Codex's MCP connection or start a new repository chat.
+### Graphify
 
-The adapter starts Graphify's existing MCP server and exposes seven local graph
-query tools plus `graphify_status`. On connection, one owner per checkout runs
-`graphify extract --code-only` and then `graphify watch`. Other chats share the
-graph and can take ownership when the owner exits normally. Graphs and logs live
-in `~/.cache/graphify/<repo-name>-<path-hash>/`; worktrees have separate caches.
-Normal shutdown stops the owner's subprocesses. A forced kill may require manual
-cleanup. Updates happen while connected; a new owner refreshes the graph.
+Install [uv](https://docs.astral.sh/uv/) first. The installer creates an isolated
+runtime with Graphify **0.9.91** and MCP SDK **1.30.0**.
 
-Initial indexing is asynchronous: check `graphify_status` before querying.
-Outside a Git checkout only status is available. `--repo /absolute/path` binds
-the adapter explicitly; `--cache-path` prints the selected cache directory.
-Indexing uses code parsing without an LLM, and child processes receive no provider
-credentials from the parent environment. Graphs can include untracked source
-files, subject to Graphify's filtering. Verify graph results against source.
+- Graphs live in `~/.cache/graphify/<repo-name>-<path-hash>/`.
+- Each checkout gets its own cache; chats on the same checkout share one watcher.
+- Indexes refresh while connected and when a new owner connects.
+- Ask Codex to call `graphify_status` to check the initial build.
 
-## Context Mode
+Leave `cwd` unset in the MCP configuration so the chat selects the repository.
+Extraction is code-only and needs no model or API key. Source filtering is handled
+by Graphify, so graphs may include untracked code.
 
-This directory is an **overlay**, not a standalone Context Mode distribution.
-It targets the existing Context Mode **1.0.169** package with Node **22.5+**.
-The upstream package supplies `server.bundle.mjs`, `hooks/codex/`, dependencies,
-and skills. Install upstream separately according to its documentation, then
-copy this directory's `.codex-plugin/` into that package's root.
+### Context Mode
 
-The launcher preserves the chat working directory, sets the Codex platform, and
-dispatches server and lifecycle-hook entrypoints. Hook commands expect `node` on
-PATH; replace it with your Node executable's absolute path if the desktop app
-cannot resolve it. `CODEX_BIN_DIR` optionally adds the directory containing Codex
-to the launcher's PATH without a machine-specific application path.
+Requires **Node 22.5+** and an installed **Context Mode 1.0.169** package.
 
-Register the resulting package through your local Codex plugin marketplace for
-the hooks and skills. The overlay includes its plugin MCP entry. Alternatively,
-use [codex.example.toml](context-mode-codex/codex.example.toml) for the server
-alone. Do not enable both MCP entries for the same server. This repository does
-not modify your Codex marketplace or install upstream automatically.
-
-Context Mode is licensed **Elastic-2.0**, not a permissive open-source license.
-Its runtime and dependencies are not vendored here. The plugin metadata retains
-the upstream author and license attribution.
-
-## Graphiti
-
-This packages the configuration of an existing local Graphiti deployment. It
-does not create a database, download models, or change Graphiti's upstream code.
-The inspected upstream checkout was commit
-`dd3fd6ca7671c90b299fe8e8867a9f8439eafbeb` (MCP version 1.1.1).
-
-Prerequisites:
-
-- A Graphiti checkout at `~/local-memory/graphiti`, or set `GRAPHITI_ROOT`.
-- uv, Docker, and an existing FalkorDB container named `graphiti-db` exposing port
-  6379 locally. Override its name with `GRAPHITI_DB_CONTAINER`.
-- Ollama on localhost:11434, with `qwen3.5:9b` and `nomic-embed-text` available.
-- On macOS, Ollama.app; Colima is used if Docker is not running.
-
-```sh
-bash graphiti-local/start-local.sh
+```bash
+CONTEXT_MODE_ROOT=/path/to/context-mode bash install.sh context-mode
 ```
 
-The script starts the existing database container and runs Graphiti on
-`127.0.0.1:8765`. Merge [codex.example.toml](graphiti-local/codex.example.toml)
-into your Codex configuration. The example uses group `personal`, a 768-dimension
-embedder, and one extraction operation at a time. Unlike Graphify's code-only
-index, Graphiti uses the local LLM and embedding model.
+The installer backs up the existing `.codex-plugin/`, applies the overlay, and
+resolves Node's path. Register that package as a Codex plugin for hooks and skills,
+or use the generated snippet for the MCP server alone. Enable only one MCP entry.
 
-Set `GRAPHITI_CONFIG` to an absolute path to override the bundled example.
-Store personal changes in ignored `config.local.yaml`. The value `ollama` in
-the API-key fields is a local compatibility placeholder, not a credential.
-Graphiti is Apache-2.0; database and model licenses are separate from this adapter.
+### Graphiti
 
-## Verification
+Requires an existing [Graphiti checkout](https://github.com/getzep/graphiti), uv,
+Ollama with **qwen3.5:9b** and **nomic-embed-text**, and a FalkorDB container named
+`graphiti-db` on localhost:6379. On macOS the launcher uses Ollama.app and starts
+Colima if Docker is unavailable. On Linux, start Ollama and Docker beforehand.
 
-The original Graphify installation was exercised through MCP for initial builds,
-queries, live edits, deletions, cache isolation, watcher sharing and ownership
-transfer. Packaging checks cover syntax, configuration parsing and launcher smoke
-tests. These checks do not provision a fresh Graphiti database or install a new
-Context Mode plugin into Codex.
+```bash
+bash install.sh graphiti
+bash ~/.local/share/graphiti-local/start-local.sh
+```
+
+The checkout defaults to `~/local-memory/graphiti`; set `GRAPHITI_ROOT` for another
+location when installing and launching. Graphiti serves MCP at
+`http://127.0.0.1:8765/mcp/`. Set `GRAPHITI_CONFIG` to use your own YAML file, and
+`GRAPHITI_DB_CONTAINER` to use another container name. Reinstallation preserves
+the installed configuration. Database creation and model downloads are separate.
+
+## Upstream
+
+[Graphify](https://github.com/Graphify-Labs/graphify) and
+[Graphiti](https://github.com/getzep/graphiti) use Apache-2.0.
+[Context Mode](https://github.com/mksglu/context-mode) uses Elastic-2.0.
+Upstream runtimes, credentials, graph caches, and personal memories are not
+included in this repository.
