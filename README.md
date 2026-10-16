@@ -1,75 +1,130 @@
 # MCP tools for Codex
 
-Personal adapters for code navigation, searchable context, and persistent memory.
-
-| Integration | What it adds |
-| --- | --- |
-| [Graphify](graphify-codex/) | Code graphs without an LLM; automatic indexing and updates |
-| [Context Mode](context-mode-codex/) | Codex launcher, lifecycle hooks, and searchable session context |
-| [Graphiti](graphiti-local/) | Local memory using Ollama and FalkorDB |
-
-## Install
-
-Requires **Bash, Python 3, and Git** on macOS or Linux.
+Install local code navigation, searchable context, and persistent memory on macOS
+or Linux. The installer downloads missing dependencies for the selected target.
 
 ```bash
 git clone https://github.com/Mamdasn/llm-tools.git
 cd llm-tools
-bash install.sh graphify      # or context-mode, graphiti, all
+bash install.sh all           # or graphify, context-mode, graphiti
 ```
 
-The installer prints the path to each generated `codex.toml`. Merge the selected
-entries into `~/.codex/config.toml`, then reload Codex. Existing Codex settings
-are left untouched. Run `bash install.sh --help` for installation path overrides.
+Run as your normal user. System packages may request sudo; do not run the entire
+installer with sudo. Linux package provisioning supports apt and dnf. macOS uses
+Homebrew, installing it through its official installer when needed. An internet
+connection and enough disk space for models, Python packages, and container images
+are required. The first install can take several minutes.
 
-### Graphify
+| Target | Downloads / installs when needed |
+| --- | --- |
+| `graphify` | uv, Python 3.12, Graphify 0.9.91, MCP SDK 1.30.0, the code-only adapter |
+| `context-mode` | Node 24 if Node 22.5+ is unavailable, Context Mode 1.0.169, native SQLite dependency, Codex overlay |
+| `graphiti` | uv, Python 3.12, Graphiti checkout and locked dependencies, Ollama, **qwen3.5:9b**, **nomic-embed-text**, Docker, FalkorDB, startup bridge |
+| `autostart` | Alias for `graphiti` |
+| `all` | All of the above |
 
-Install [uv](https://docs.astral.sh/uv/) first. The installer creates an isolated
-runtime with Graphify **0.9.91** and MCP SDK **1.30.0**.
+The installer prints `codex.toml` snippet paths. Merge the selected entries into
+`~/.codex/config.toml`, then reload Codex. It does not edit your global config.
+Existing Graphiti configuration, containers, volumes, and downloaded models are
+reused. Missing models are pulled from the preserved YAML configuration, so a
+custom model is not silently replaced with the default. Download failures stop
+installation with a nonzero exit; rerun to resume. Concurrent installer runs are
+not supported.
 
-- Graphs live in `~/.cache/graphify/<repo-name>-<path-hash>/`.
-- Each checkout gets its own cache; chats on the same checkout share one watcher.
-- Indexes refresh while connected and when a new owner connects.
-- Ask Codex to call `graphify_status` to check the initial build.
+## Graphiti startup
 
-Leave `cwd` unset in the MCP configuration so the chat selects the repository.
-Extraction is code-only and needs no model or API key. Source filtering is handled
-by Graphify, so graphs may include untracked code.
-
-### Context Mode
-
-Requires **Node 22.5+** and an installed **Context Mode 1.0.169** package.
+One canonical Bash entry point is used by both Codex and Linux systemd:
 
 ```bash
-CONTEXT_MODE_ROOT=/path/to/context-mode bash install.sh context-mode
+bash ~/.local/share/codex-mcp-autostart/mcp.sh graphiti start
+bash ~/.local/share/codex-mcp-autostart/mcp.sh graphiti status
 ```
 
-The installer backs up the existing `.codex-plugin/`, applies the overlay, and
-resolves Node's path. Register that package as a Codex plugin for hooks and skills,
-or use the generated snippet for the MCP server alone. Enable only one MCP entry.
+On macOS, the generated Codex entry invokes `mcp.sh graphiti mcp`. It starts or
+reuses Graphiti, waits for readiness, then bridges stdio MCP to HTTP. This runs
+when Codex initializes that MCP connection, not merely when an idle app window
+opens. No Swift app watcher or LaunchAgent is needed.
 
-### Graphiti
-
-Requires an existing [Graphiti checkout](https://github.com/getzep/graphiti), uv,
-Ollama with **qwen3.5:9b** and **nomic-embed-text**, and a FalkorDB container named
-`graphiti-db` on localhost:6379. On macOS the launcher uses Ollama.app and starts
-Colima if Docker is unavailable. On Linux, start Ollama and Docker beforehand.
+On Linux, the installer also writes user units:
 
 ```bash
-bash install.sh graphiti
-bash ~/.local/share/graphiti-local/start-local.sh
+systemctl --user daemon-reload
+systemctl --user enable --now codex-mcp.target
+systemctl --user status codex-graphiti.service
 ```
 
-The checkout defaults to `~/local-memory/graphiti`; set `GRAPHITI_ROOT` for another
-location when installing and launching. Graphiti serves MCP at
-`http://127.0.0.1:8765/mcp/`. Set `GRAPHITI_CONFIG` to use your own YAML file, and
-`GRAPHITI_DB_CONTAINER` to use another container name. Reinstallation preserves
-the installed configuration. Database creation and model downloads are separate.
+Use `systemctl --user start codex-mcp.target` for a one-time start without enabling
+login startup. The target starts `codex-graphiti.service`, which invokes the same
+Bash script. Graphify and Context Mode remain per-client stdio servers; Graphify
+needs a repository context. Remote MCPs still require their own authentication.
+See the [startup guide](codex-mcp-autostart/README.md) for configuration and removal.
+
+Graphiti uses `http://127.0.0.1:8765/mcp/`, Ollama uses port 11434, and new FalkorDB
+containers bind **127.0.0.1:6379** with a persistent `graphiti-memory` volume.
+macOS installs Colima when no Docker engine is available. On Linux a missing
+Docker installation is provisioned using Docker's rootless installer. A working
+user systemd session and subordinate UID/GID ranges are required by that installer;
+it reports prerequisite failures. An existing Docker installation is reused, and
+must be accessible without sudo. The installer does not change group memberships
+or replace existing Docker contexts/containers. Runtime startup never downloads
+packages or models.
+
+## Configuration
+
+Run `bash install.sh --help` for target usage. Set variables before installation:
+
+| Variable | Default / purpose |
+| --- | --- |
+| `GRAPHIFY_CODEX_HOME` | `~/.local/share/graphify-codex` |
+| `CONTEXT_MODE_ROOT` | `~/.local/share/codex-context-mode/plugins/context-mode`; existing package or fresh destination |
+| `LLM_TOOLS_NODE_HOME` | `~/.local/share/llm-tools/node`; isolated Node fallback |
+| `GRAPHITI_ROOT` | `~/local-memory/graphiti`; existing checkout or fresh destination |
+| `GRAPHITI_REVISION` | `dd3fd6ca7671c90b299fe8e8867a9f8439eafbeb`; only used for new checkouts |
+| `GRAPHITI_LOCAL_HOME` | `~/.local/share/graphiti-local`; launcher and preserved YAML |
+| `GRAPHITI_CONFIG` | `$GRAPHITI_LOCAL_HOME/config.example.yaml`; use existing custom YAML |
+| `GRAPHITI_DB_CONTAINER` / `GRAPHITI_DB_VOLUME` | `graphiti-db` / `graphiti-memory`; volume used only for container creation |
+| `FALKORDB_IMAGE` | `falkordb/falkordb:v4.22.1`; only used for new containers |
+| `CODEX_MCP_AUTOSTART_HOME` | `~/.local/share/codex-mcp-autostart` |
+| `GRAPHITI_START_SCRIPT` | `$GRAPHITI_LOCAL_HOME/start-local.sh`; alternate backend launcher |
+| `GRAPHITI_MCP_PYTHON` | `$GRAPHITI_ROOT/mcp_server/.venv/bin/python` |
+
+Existing Context Mode packages must match 1.0.169; incompatible versions fail
+without being replaced. The installer backs up the existing `.codex-plugin/`
+before applying the overlay. Register the package as a Codex plugin for hooks and
+skills, or use its generated snippet for the MCP server alone. Enable only one
+Context Mode MCP entry.
+
+Graphify stores graphs in `~/.cache/graphify/<repo-name>-<path-hash>/`; each checkout
+shares its watcher. Leave `cwd` unset so Codex selects the repository. Ask
+`graphify_status` for indexing progress. Extraction is code-only and requires no
+model/API key; Graphify's source filters may include untracked code.
+
+## Dependencies and validation
+
+Downloads use official [uv](https://docs.astral.sh/uv/getting-started/installation/),
+[Ollama](https://docs.ollama.com/linux),
+[Docker rootless](https://docs.docker.com/engine/security/rootless/),
+[Homebrew](https://docs.brew.sh/Installation), Node distributions (with SHA-256
+verification), and npm's Context Mode package (registry integrity verification).
+Ollama model tags, package-manager packages, and installer scripts can change
+upstream. Existing Graphiti checkouts are never reset or upgraded; `uv sync
+--locked` installs their checked-in dependency lock. GPU drivers are not installed
+by this repository; Ollama may use CPU when no supported GPU runtime is present.
+
+Run regression tests using a Graphiti Python environment with MCP installed:
+
+```bash
+~/local-memory/graphiti/mcp_server/.venv/bin/python -B -m unittest discover -s codex-mcp-autostart/tests -v
+```
+
+Tests cover concurrent startup, HTTP protocol forwarding, closed stdin, install
+rollback, platform-specific unit generation, dependency reuse, and failed pulls.
+Dependency tests use temporary fake commands; they do not download large models
+or test every distribution's system package manager.
 
 ## Upstream
 
 [Graphify](https://github.com/Graphify-Labs/graphify) and
 [Graphiti](https://github.com/getzep/graphiti) use Apache-2.0.
 [Context Mode](https://github.com/mksglu/context-mode) uses Elastic-2.0.
-Upstream runtimes, credentials, graph caches, and personal memories are not
-included in this repository.
+Upstream runtimes, credentials, graph caches, and personal memories are not included.

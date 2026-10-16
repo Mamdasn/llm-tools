@@ -1,0 +1,8 @@
+# The installer generates codex.toml with absolute paths for your installation.
+# Merge this key at the TOP LEVEL, before any TOML table headers.
+mcp_optional_startup_grace_ms = 0
+
+[mcp_servers.graphiti]
+command = "/bin/bash"
+args = ["/absolute/path/to/codex-mcp-autostart/mcp.sh", "graphiti", "mcp"]
+startup_timeout_sec = 180.0
