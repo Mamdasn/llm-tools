@@ -32,9 +32,12 @@ def configuration(env=None, home=None):
     local = absolute(env.get("GRAPHITI_LOCAL_HOME", home / ".local/share/graphiti-local"))
     startup_env = {"PATH": env.get("PATH", os.defpath), "GRAPHITI_ROOT": str(graphiti),
                    "GRAPHITI_CONFIG": str(absolute(env.get("GRAPHITI_CONFIG", local / "config.example.yaml")))}
-    for key in ("GRAPHITI_DB_CONTAINER", "DOCKER_HOST", "DOCKER_CONTEXT"):
+    for key in ("GRAPHITI_DB_CONTAINER", "DOCKER_HOST", "DOCKER_CONTEXT", "CODEX_HOME"):
         if key in env:
             startup_env[key] = env[key]
+    codex = shutil.which("codex", path=env.get("PATH", os.defpath))
+    if codex:
+        startup_env["GRAPHITI_CODEX_BIN"] = codex
     settings = {
         "health_url": "http://127.0.0.1:8765/health", "mcp_url": "http://127.0.0.1:8765/mcp/",
         "startup_command": ["/bin/bash", str(absolute(env.get("GRAPHITI_START_SCRIPT", local / "start-local.sh")))],

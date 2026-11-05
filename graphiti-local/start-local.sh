@@ -14,4 +14,6 @@ docker start "$database_container" >&2
 export OPENAI_API_KEY=ollama
 export OPENAI_BASE_URL=http://localhost:11434/v1
 export SEMAPHORE_LIMIT=1
-exec .venv/bin/python main.py --config "$config_path" --transport http --host 127.0.0.1 --port 8765
+export PYTHONPATH="$graphiti_root${PYTHONPATH:+:$PYTHONPATH}"
+export GRAPHITI_TELEMETRY_ENABLED=false
+exec .venv/bin/python "$source_dir/codex_server.py" --config "$config_path" --transport http --host 127.0.0.1 --port 8765

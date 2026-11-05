@@ -57,9 +57,17 @@ only. Enable one MCP entry. Existing packages must match the pinned version.
 
 ### Graphiti
 
-Installs Graphiti, Ollama, `qwen3.5:9b`, `nomic-embed-text`, FalkorDB, and a startup
-bridge. Existing configuration, models, and volumes are reused. Codex starts the
-service when its MCP connection initializes.
+Installs Graphiti, Ollama, `nomic-embed-text`, FalkorDB, and a startup bridge.
+New configurations use your Codex CLI ChatGPT login for extraction and reranking,
+with local 768-dimension embeddings. Codex inference still uses hosted models.
+Install a current Codex CLI supporting `exec --ignore-user-config` and run
+`codex login` first. No separate LLM API key is needed.
+
+Existing configuration, models, and volumes are reused. To switch an existing
+configuration, set `llm.provider` to `codex` and `llm.model` to `gpt-6.1-sol` in the
+YAML selected by `GRAPHITI_CONFIG`; keep its embedding settings unchanged.
+The launcher registers the adapter without editing the upstream Graphiti checkout.
+Codex starts the service when its MCP connection initializes.
 
 ```bash
 bash ~/.local/share/codex-mcp-autostart/mcp.sh graphiti status

@@ -14,7 +14,7 @@ Usage: bash install.sh <graphify|context-mode|graphiti|autostart|playwright|all>
 
 graphify      Install uv, Python, and the pinned Graphify runtime and adapter.
 context-mode  Install Node, Context Mode 1.0.169, and the Codex overlay.
-graphiti      Install Graphiti, Ollama, models, FalkorDB, and the startup bridge.
+graphiti      Install Graphiti, local embeddings, FalkorDB, and the startup bridge.
 autostart     Alias for graphiti; includes the canonical Bash entry point.
 playwright    Install Playwright CLI and its global Codex skill.
 all           Install all four integrations and their dependencies.
@@ -34,7 +34,9 @@ Optional environment variables:
   GRAPHITI_MCP_PYTHON   Existing Graphiti Python runtime (default: $GRAPHITI_ROOT/mcp_server/.venv/bin/python)
   GRAPHITI_START_SCRIPT  Existing launcher (default: $GRAPHITI_LOCAL_HOME/start-local.sh)
 
-Graphiti downloads qwen3.5:9b and nomic-embed-text for new configurations.
+Graphiti uses your existing Codex CLI ChatGPT login for inference and reranking.
+Install Codex CLI and run codex login first. New configurations download only
+nomic-embed-text for local embeddings; Codex inference still uses hosted models.
 Existing configurations and models are reused. Linux user units are generated;
 macOS Codex invokes the same mcp.sh script. See codex-mcp-autostart/README.md.
 HELP
@@ -139,6 +141,8 @@ if [[ "$target" == graphiti || "$target" == all ]]; then
   mkdir -p "$graphiti_dir"
   install -m 755 "$source_dir/graphiti-local/start-local.sh" "$graphiti_dir/start-local.sh"
   install -m 644 "$source_dir/graphiti-local/runtime.sh" "$graphiti_dir/runtime.sh"
+  install -m 644 "$source_dir/graphiti-local/codex_client.py" "$graphiti_dir/codex_client.py"
+  install -m 644 "$source_dir/graphiti-local/codex_server.py" "$graphiti_dir/codex_server.py"
   # Keep an existing user's configuration on repeated installs.
   if [[ ! -e "$graphiti_dir/config.example.yaml" ]]; then
     install -m 600 "$source_dir/graphiti-local/config.example.yaml" "$graphiti_dir/config.example.yaml"

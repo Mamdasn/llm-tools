@@ -182,9 +182,21 @@ provision_graphiti_data() {
   # Read the user's preserved configuration, not hardcoded replacement models.
   if ! "$graphiti_root/mcp_server/.venv/bin/python" - "${GRAPHITI_CONFIG:-$graphiti_dir/config.example.yaml}" > "$models_file" <<'PY'
 import sys, yaml
+from urllib.parse import urlsplit
 with open(sys.argv[1]) as source:
     config = yaml.safe_load(source)
-models = [config['llm']['model'], config['llm'].get('small_model'), config['embedder']['model']]
+models = []
+for name in ('llm', 'embedder'):
+    section = config[name]
+    provider = section['provider'].lower()
+    if provider == 'codex':
+        continue
+    endpoint = section.get('providers', {}).get(provider, {}).get('api_url', '')
+    url = urlsplit(endpoint)
+    if url.hostname in ('localhost', '127.0.0.1') and url.port == 11434:
+        models.append(section['model'])
+        if name == 'llm':
+            models.append(section.get('small_model'))
 for model in dict.fromkeys(model for model in models if model):
     if not isinstance(model, str) or not model.strip() or '\n' in model or model.startswith('-'):
         raise ValueError('Invalid Ollama model in Graphiti configuration')
