@@ -118,19 +118,6 @@ check_sqlite() {
   node -e 'const D=require(require("node:path").resolve(process.argv[1],"node_modules/better-sqlite3")); const db=new D(":memory:"); db.prepare("select 1").get(); db.close()' "$1"
 }
 
-ensure_ollama() {
-  if ! have ollama && [[ -x /Applications/Ollama.app/Contents/Resources/ollama ]]; then
-    export PATH="$PATH:/Applications/Ollama.app/Contents/Resources"
-  fi
-  if ! have ollama; then
-    if [[ "$(uname -s)" == Darwin ]]; then
-      ensure_brew; brew install ollama
-    else
-      official_installer https://ollama.com/install.sh sh
-    fi
-  fi
-}
-
 ensure_docker() {
   if [[ "$(uname -s)" == Darwin ]]; then
     if ! have docker; then ensure_brew; brew install docker; fi
@@ -164,11 +151,30 @@ ensure_graphiti_checkout() (
   uv sync --python 3.12 --locked
 )
 
+ensure_graphiti_embedder() {
+  local python="$graphiti_root/mcp_server/.venv/bin/python"
+  if [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]]; then
+    uv pip install --python "$python" --only-binary llama-cpp-python \
+      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal \
+      llama-cpp-python==0.3.16
+  else
+    # Build the pinned CPU runtime when no matching Apple Silicon wheel exists.
+    if [[ "$(uname -s)" == Linux ]]; then
+      if ! have c++ || ! have cmake || ! have make; then
+        if have apt-get; then linux_packages build-essential cmake; else linux_packages gcc-c++ make cmake; fi
+      fi
+    else
+      xcode-select -p >/dev/null 2>&1 || die 'Install Apple Command Line Tools with xcode-select --install, then rerun.'
+      if ! have cmake; then ensure_brew; brew install cmake; fi
+    fi
+    CMAKE_ARGS="${CMAKE_ARGS:--DGGML_METAL=OFF}" uv pip install --python "$python" llama-cpp-python==0.3.16
+  fi
+}
+
 provision_graphiti_data() {
-  # These helpers are also used by start-local.sh, but model/container creation
-  # belongs exclusively to this installer.
+  "$graphiti_root/mcp_server/.venv/bin/python" "$source_dir/graphiti-local/provision_embeddings.py" \
+    "${GRAPHITI_CONFIG:-$graphiti_dir/config.example.yaml}" "$graphiti_dir"
   source "$source_dir/graphiti-local/runtime.sh"
-  start_ollama
   start_docker
   database_container="${GRAPHITI_DB_CONTAINER:-graphiti-db}"
   if ! docker container inspect "$database_container" >/dev/null 2>&1; then
@@ -178,35 +184,4 @@ provision_graphiti_data() {
   else
     docker start "$database_container" >/dev/null
   fi
-  models_file="$(mktemp)"
-  # Read the user's preserved configuration, not hardcoded replacement models.
-  if ! "$graphiti_root/mcp_server/.venv/bin/python" - "${GRAPHITI_CONFIG:-$graphiti_dir/config.example.yaml}" > "$models_file" <<'PY'
-import sys, yaml
-from urllib.parse import urlsplit
-with open(sys.argv[1]) as source:
-    config = yaml.safe_load(source)
-models = []
-for name in ('llm', 'embedder'):
-    section = config[name]
-    provider = section['provider'].lower()
-    if provider == 'codex':
-        continue
-    endpoint = section.get('providers', {}).get(provider, {}).get('api_url', '')
-    url = urlsplit(endpoint)
-    if url.hostname in ('localhost', '127.0.0.1') and url.port == 11434:
-        models.append(section['model'])
-        if name == 'llm':
-            models.append(section.get('small_model'))
-for model in dict.fromkeys(model for model in models if model):
-    if not isinstance(model, str) or not model.strip() or '\n' in model or model.startswith('-'):
-        raise ValueError('Invalid Ollama model in Graphiti configuration')
-    print(model)
-PY
-  then rm -f "$models_file"; die 'Could not read models from Graphiti configuration.'; fi
-  while IFS= read -r model; do
-    if ! ollama show "$model" >/dev/null 2>&1; then
-      if ! ollama pull "$model"; then rm -f "$models_file"; die "Model download failed: $model. Rerun to resume."; fi
-    fi
-  done < "$models_file"
-  rm -f "$models_file"
 }

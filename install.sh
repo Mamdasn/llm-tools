@@ -37,7 +37,8 @@ Optional environment variables:
 Graphiti uses your existing Codex CLI ChatGPT login for inference and reranking.
 Install Codex CLI and run codex login first. New configurations download only
 nomic-embed-text for local embeddings; Codex inference still uses hosted models.
-Existing configurations and models are reused. Linux user units are generated;
+Ollama is not installed or started. Standard older configurations are backed up
+and migrated; custom providers are preserved. Linux user units are generated;
 macOS Codex invokes the same mcp.sh script. See codex-mcp-autostart/README.md.
 HELP
     exit 0
@@ -83,9 +84,9 @@ PY
   check_sqlite "$context_dir"
 fi
 if [[ "$target" == graphiti || "$target" == all ]]; then
-  ensure_ollama
   ensure_docker
   ensure_graphiti_checkout
+  ensure_graphiti_embedder
 fi
 
 if [[ "$target" == graphify || "$target" == all ]]; then
@@ -143,6 +144,7 @@ if [[ "$target" == graphiti || "$target" == all ]]; then
   install -m 644 "$source_dir/graphiti-local/runtime.sh" "$graphiti_dir/runtime.sh"
   install -m 644 "$source_dir/graphiti-local/codex_client.py" "$graphiti_dir/codex_client.py"
   install -m 644 "$source_dir/graphiti-local/codex_server.py" "$graphiti_dir/codex_server.py"
+  install -m 644 "$source_dir/graphiti-local/local_embedder.py" "$graphiti_dir/local_embedder.py"
   # Keep an existing user's configuration on repeated installs.
   if [[ ! -e "$graphiti_dir/config.example.yaml" ]]; then
     install -m 600 "$source_dir/graphiti-local/config.example.yaml" "$graphiti_dir/config.example.yaml"

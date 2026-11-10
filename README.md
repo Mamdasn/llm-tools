@@ -57,15 +57,34 @@ only. Enable one MCP entry. Existing packages must match the pinned version.
 
 ### Graphiti
 
-Installs Graphiti, Ollama, `nomic-embed-text`, FalkorDB, and a startup bridge.
+Installs Graphiti, `llama-cpp-python` **0.3.16**, a pinned `nomic-embed-text` GGUF,
+FalkorDB, and a startup bridge. Ollama is not installed or started.
 New configurations use your Codex CLI ChatGPT login for extraction and reranking,
 with local 768-dimension embeddings. Codex inference still uses hosted models.
 Install a current Codex CLI supporting `exec --ignore-user-config` and run
 `codex login` first. No separate LLM API key is needed.
 
-Existing configuration, models, and volumes are reused. To switch an existing
-configuration, set `llm.provider` to `codex` and `llm.model` to `gpt-6.1-sol` in the
-YAML selected by `GRAPHITI_CONFIG`; keep its embedding settings unchanged.
+The embedding model runs directly inside Graphiti on the CPU. Apple Silicon uses
+a prebuilt Python wheel; Linux and Intel Macs build the pinned runtime with CMake
+and a C++ compiler. Model downloads are checked against a pinned SHA-256. An exact
+cached copy from an earlier Ollama installation is reused without running Ollama.
+
+The installer backs up and migrates the previous default `nomic-embed-text`
+embedding configuration to `llama_cpp`. The older default `qwen3.5:9b` LLM also
+migrates to Codex. Custom providers and database settings are preserved; custom
+Ollama models require an explicit compatible replacement before installation.
+The new embedding settings are:
+
+```yaml
+embedder:
+  provider: llama_cpp
+  model: nomic-embed-text
+  dimensions: 768
+```
+
+`nomic-embed-text` resolves to `$GRAPHITI_LOCAL_HOME/models/nomic-embed-text.gguf`.
+For a custom model, set `model` to its GGUF path and keep dimensions compatible
+with the stored graph. Runtime startup does not download packages or models.
 The launcher registers the adapter without editing the upstream Graphiti checkout.
 Codex starts the service when its MCP connection initializes.
 

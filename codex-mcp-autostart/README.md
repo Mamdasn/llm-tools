@@ -71,8 +71,16 @@ process identity, and `codex-graphiti-server.log`. Concurrent clients share the
 lock. An already healthy backend is reused without running its startup script.
 The bridge forwards the original MCP identity, tools, requests and responses.
 
-Custom Graphiti YAML must match the local Ollama/FalkorDB setup provisioned by the
-root installer. If using remote providers or another database, provision those
+The default Graphiti YAML uses Codex for extraction/reranking, an in-process
+Nomic GGUF embedder, and FalkorDB. Ollama is not a startup dependency. Reinstalling
+with `bash install.sh graphiti` migrates standard older configurations after
+backing them up. It preserves database settings, volumes, and memories.
+
+The installer does not change unrelated OS login services. If Ollama was separately
+enabled at macOS login, disable its Login Item in System Settings. Its background
+helper can also be disabled with `launchctl disable gui/$(id -u)/com.ollama.ollama`.
+
+If using remote providers or another database, provision those
 separately and run the adapter-only installer with `GRAPHITI_START_SCRIPT` and
 `GRAPHITI_MCP_PYTHON`. Set the health and MCP URLs in `settings.json` to match.
 

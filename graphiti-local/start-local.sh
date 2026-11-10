@@ -8,11 +8,8 @@ database_container="${GRAPHITI_DB_CONTAINER:-graphiti-db}"
 cd "$graphiti_root/mcp_server"
 
 source "$source_dir/runtime.sh"
-start_ollama
 start_docker
 docker start "$database_container" >&2
-export OPENAI_API_KEY=ollama
-export OPENAI_BASE_URL=http://localhost:11434/v1
 export SEMAPHORE_LIMIT=1
 export PYTHONPATH="$graphiti_root${PYTHONPATH:+:$PYTHONPATH}"
 export GRAPHITI_TELEMETRY_ENABLED=false

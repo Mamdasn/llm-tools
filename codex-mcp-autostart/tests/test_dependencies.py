@@ -23,12 +23,17 @@ class DependencyTests(unittest.TestCase):
                         HOME=str(self.root), XDG_STATE_HOME=str(self.root / "state"))
         self.command("uname", "echo Linux")
         self.command("docker", 'echo "docker $*" >> "$CALLS"\nif [[ "$1 $2" == "container inspect" ]]; then exit "${CONTAINER_MISSING:-0}"; fi')
-        self.command("ollama", 'echo "ollama $*" >> "$CALLS"\nif [[ "$1" == show && "$2" == qwen3.5:9b ]]; then exit "${MODEL_MISSING:-0}"; fi\nif [[ "$1" == pull ]]; then exit "${PULL_FAIL:-0}"; fi')
+        self.command("ollama", 'echo forbidden-ollama >> "$CALLS"; exit 1')
         graphiti = self.root / "graphiti/mcp_server/.venv/bin"
         graphiti.mkdir(parents=True)
-        # Stub model extraction: validate selection semantics without PyYAML.
-        (graphiti / "python").write_text('#!/bin/bash\ncat >/dev/null\nprintf "qwen3.5:9b\\nnomic-embed-text\\n"\n')
+        (graphiti / "python").write_text('#!/bin/bash\nexec ' + shlex.quote(sys.executable) + ' "$@"\n')
         (graphiti / "python").chmod(0o755)
+        self.config = self.root / "local/config.example.yaml"
+        self.config.parent.mkdir()
+        self.config.write_text(json.dumps({
+            "llm": {"provider": "codex", "model": "gpt-6.1-sol"},
+            "embedder": {"provider": "openai", "model": "custom-remote"},
+        }))
 
     def command(self, name, body):
         path = self.bin / name
@@ -42,27 +47,44 @@ class DependencyTests(unittest.TestCase):
         script += '\nsource "$source_dir/scripts/dependencies.sh"\n' + command
         return subprocess.run(["bash", "-c", script], env=dict(self.env, **(extra_env or {})), capture_output=True, text=True)
 
-    def test_existing_database_and_models_are_reused(self):
+    def test_existing_database_and_custom_embedding_provider_are_reused(self):
+        before = self.config.read_bytes()
         result = self.run_function("provision_graphiti_data")
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.log.read_text()
         self.assertNotIn("docker run", calls)
-        self.assertNotIn("ollama pull", calls)
+        self.assertNotIn("ollama", calls)
         self.assertIn("docker start graphiti-db", calls)
+        self.assertEqual(self.config.read_bytes(), before)
 
-    def test_missing_database_binds_loopback_and_only_missing_model_downloaded(self):
-        result = self.run_function("provision_graphiti_data", {"CONTAINER_MISSING": "1", "MODEL_MISSING": "1"})
+    def test_missing_database_binds_loopback_without_starting_ollama(self):
+        result = self.run_function("provision_graphiti_data", {"CONTAINER_MISSING": "1"})
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.log.read_text()
         self.assertIn("-p 127.0.0.1:6379:6379", calls)
         self.assertIn("graphiti-memory:/data", calls)
-        self.assertIn("ollama pull qwen3.5:9b", calls)
-        self.assertNotIn("ollama pull nomic", calls)
+        self.assertNotIn("ollama", calls)
 
-    def test_failed_model_download_is_not_reported_successful(self):
-        result = self.run_function("provision_graphiti_data", {"MODEL_MISSING": "1", "PULL_FAIL": "1"})
+    def test_missing_custom_model_stops_before_database_start(self):
+        self.config.write_text(json.dumps({
+            "llm": {"provider": "codex", "model": "gpt-6.1-sol"},
+            "embedder": {"provider": "llama_cpp", "model": str(self.root / "missing.gguf")},
+        }))
+        result = self.run_function("provision_graphiti_data")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Model download failed", result.stderr)
+        self.assertIn("Install the configured custom GGUF", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_runtime_starts_without_ollama_or_injected_api_credentials(self):
+        python = self.root / "graphiti/mcp_server/.venv/bin/python"
+        python.write_text('#!/bin/bash\necho "python $*" >> "$CALLS"\n'
+                          '[[ -z "${OPENAI_API_KEY:-}${OPENAI_BASE_URL:-}" ]]\n')
+        result = self.run_function('GRAPHITI_ROOT="$graphiti_root" bash "$source_dir/graphiti-local/start-local.sh"',
+                                   {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.log.read_text()
+        self.assertNotIn("ollama", calls)
+        self.assertIn("codex_server.py", calls)
 
     def test_linux_does_not_try_to_start_colima(self):
         self.command("docker", "exit 1")

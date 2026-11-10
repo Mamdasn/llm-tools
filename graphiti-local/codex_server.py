@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from codex_client import CodexClient, CodexRerankerClient
+from local_embedder import LocalEmbedder
 from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 
@@ -18,6 +20,12 @@ def main() -> None:
     factories = importlib.import_module('services.factories')
     original_llm = factories.LLMClientFactory.create
     original_reranker = factories.CrossEncoderFactory.create
+    original_embedder = factories.EmbedderFactory.create
+
+    def create_embedder(config: Any) -> EmbedderClient:
+        if config.provider.lower() != 'llama_cpp':
+            return original_embedder(config)
+        return LocalEmbedder(model_path=config.model, dimensions=config.dimensions)
 
     def create_llm(config: Any) -> LLMClient:
         if config.provider.lower() != 'codex':
@@ -37,6 +45,7 @@ def main() -> None:
 
     factories.LLMClientFactory.create = staticmethod(create_llm)
     factories.CrossEncoderFactory.create = staticmethod(create_reranker)
+    factories.EmbedderFactory.create = staticmethod(create_embedder)
     runpy.run_path(str(server_root / 'main.py'), run_name='__main__')
 
 

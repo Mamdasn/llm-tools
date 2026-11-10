@@ -9,13 +9,9 @@ llm:
   max_tokens: 8192
 
 embedder:
-  provider: openai
+  provider: llama_cpp
   model: nomic-embed-text
   dimensions: 768
-  providers:
-    openai:
-      api_key: ollama
-      api_url: "http://localhost:11434/v1"
 
 database:
   provider: falkordb
